@@ -8,6 +8,7 @@ export type AgentState =
   | 'PATCH_GENERATING'
   | 'PATCH_VALIDATING'
   | 'SANDBOX_TESTING'
+  | 'TARGETED_TESTING'
   | 'REGRESSION_TESTING'
   | 'API_REPLAY'
   | 'REFLECTION'
@@ -17,98 +18,62 @@ export type AgentState =
   | 'HEALED'
   | 'FAILED';
 
-export interface TelemetryEventPayloadMap {
-  'state:changed': {
-    incidentId: string;
-    previousState: AgentState;
-    currentState: AgentState;
-    timestamp: number;
-    durationMs: number;
-  };
-  'log:terminal': {
-    incidentId: string;
-    stream: 'stdout' | 'stderr';
-    chunk: string;
-    timestamp: number;
-  };
-  'patch:synthesized': {
-    incidentId: string;
-    attempt: number;
-    filePath: string;
-    startLine: number;
-    endLine: number;
-    unifiedDiff: string;
-    beforeCode: string;
-    afterCode: string;
-  };
-  'verification:level_completed': {
-    incidentId: string;
-    level: 1 | 2 | 3 | 4 | 5;
-    name: string;
-    passed: boolean;
-    durationMs: number;
-    details: string;
-  };
-  'replay:completed': {
-    incidentId: string;
-    endpoint: string;
-    beforeStatus: number;
-    afterStatus: number;
-    beforeResponse: Record<string, unknown>;
-    afterResponse: Record<string, unknown>;
-    success: boolean;
-  };
-  'safety:evaluated': {
-    incidentId: string;
-    verificationScore: number;
-    riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
-    scope: 'LOCAL' | 'MODERATE' | 'BROAD';
-    metrics: {
-      filesChanged: number;
-      linesChanged: number;
-      testsPassed: number;
-      testsFailed: number;
-      regressionPassed: boolean;
-      replayPassed: boolean;
-    };
-  };
-  'pr:created': {
-    incidentId: string;
-    prNumber: number;
-    prUrl: string;
-    branchName: string;
-  };
+export interface RepositoryMetadata {
+  id: string;
+  provider: 'github';
+  owner: string;
+  name: string;
+  fullName: string;
+  defaultBranch: string;
+  selectedBranch: string;
+  language: string;
+  framework: string;
+  testRunner: string;
+  packageManager: string;
+  connectedAt: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'ERROR';
 }
 
-export interface IncidentData {
-  id: string;
-  incidentCode: string;
-  timestamp: string;
-  microservice: string;
+export interface PatchHunk {
+  file: string;
+  originalCode: string;
+  patchedCode: string;
+  explanation: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface VerificationResult {
+  score: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'BLOCKED';
+  testsPassed: number;
+  totalTests: number;
+  regressions: number;
+  replayBeforeStatus: number;
+  replayAfterStatus: number;
+  logs: string[];
+}
+
+export interface IncidentRecord {
+  incidentId: string;
+  workflowId: string;
+  repositoryId: string;
+  service: string;
   endpoint: string;
-  errorSignature: string;
+  errorType: string;
   errorMessage: string;
   stackTrace: string;
-  initialPayload: Record<string, unknown>;
-  mttr: string;
-  status: 'Healed' | 'Partially Healed' | 'Failed' | 'Pending';
-  prNumber?: string;
-  prUrl?: string;
-  branchName?: string;
-  beforeCode?: string;
-  afterCode?: string;
-  unifiedDiff?: string;
-  filePath?: string;
-  verificationScore?: number;
-  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
-  testsPassedCount?: number;
-  testsTotalCount?: number;
-  testEvidenceLogs?: string[];
-  replayResult?: {
-    beforeStatus: number;
-    afterStatus: number;
-    beforeTime: string;
-    afterTime: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'HEALED' | 'FAILED';
+  currentStage: AgentState;
+  localizedFile?: string;
+  localizedLine?: number;
+  patch?: PatchHunk;
+  verification?: VerificationResult;
+  pr?: {
+    number: number;
+    url: string;
+    branch: string;
   };
-  rootCauseAnalysis?: string;
+  createdAt: string;
+  updatedAt: string;
 }
