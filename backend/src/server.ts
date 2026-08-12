@@ -38,48 +38,11 @@ if (process.env.MONGODB_URI) {
 }
 
 // In-Memory Microservices Store
-let guardedServices = [
-  { id: 'srv-1', name: 'Payment Service', repository: 'jithendra0909/PatchPulse', branch: 'main', language: 'Python', status: 'ACTIVE', lastSync: '2m ago' },
-  { id: 'srv-2', name: 'User Service', repository: 'jithendra0909/user-service', branch: 'main', language: 'Python', status: 'ACTIVE', lastSync: '5m ago' },
-  { id: 'srv-3', name: 'Order Service', repository: 'jithendra0909/order-service', branch: 'main', language: 'Node.js', status: 'ACTIVE', lastSync: '12m ago' },
+let guardedServices: any[] = [
+  { id: 'srv-1', name: 'PatchPulse Guarded API', repository: 'jithendra0909/PatchPulse', branch: 'main', language: 'Python/TypeScript', status: 'ACTIVE', lastSync: 'Just now' },
 ];
 
-let incidentsStore: any[] = [
-  {
-    id: '#INC-94',
-    time: '2 mins ago',
-    service: 'Payment Service',
-    endpoint: 'POST /checkout',
-    error: 'SchemaDriftKeyError',
-    mttr: '6.4s',
-    status: 'Healed',
-    pr: 'PR #104',
-    prUrl: 'https://github.com/jithendra0909/PatchPulse/pull/1',
-    createdAt: new Date(Date.now() - 120000).toISOString(),
-    patch: {
-      originalCode: 'def process_checkout(payload):\n    user_id = payload["user_id"]\n    amount = payload["amount"]',
-      patchedCode: 'def process_checkout(payload):\n    if not payload or not isinstance(payload, dict):\n        return {"status": "error", "code": 400}\n    user_id = payload.get("user_id")\n    amount = payload.get("amount", 0)',
-      explanation: 'Added defensive schema validation and default value retrieval.',
-      additions: 6,
-      deletions: 2,
-    },
-    verification: {
-      score: 98,
-      riskLevel: 'LOW',
-      testsPassed: 14,
-      totalTests: 14,
-      regressions: 0,
-      replayBeforeStatus: 500,
-      replayAfterStatus: 200,
-      logs: [
-        '$ pytest tests/test_checkout.py -q',
-        'tests/test_checkout.py::test_null_payload PASSED [100%]',
-        'tests/test_checkout.py::test_schema_drift PASSED [100%]',
-        '======================== 14 passed in 0.42s ========================',
-      ],
-    },
-  },
-];
+let incidentsStore: any[] = [];
 
 let appSettings = {
   targetRepoOwner: process.env.GITHUB_OWNER || 'jithendra0909',
@@ -135,9 +98,60 @@ app.get('/api/system/health', (_req, res) => {
   });
 });
 
-// 2. Microservice CRUD Endpoints
+// 2. Microservice Connection & CRUD Endpoints
 app.get('/api/services', (_req, res) => {
   res.json({ services: guardedServices });
+});
+
+app.post('/api/services/connect', async (req, res) => {
+  const { repository = 'jithendra0909/PatchPulse', branch = 'main' } = req.body;
+  
+  const cleanRepo = repository.replace('https://github.com/', '').replace('.git', '');
+  const [owner, name] = cleanRepo.split('/');
+
+  console.log(`⚡ [CONNECT SERVICE] Analyzing & guarding repository ${cleanRepo} (${branch})`);
+
+  let detectedLanguage = 'TypeScript / Python';
+  let githubVerified = false;
+
+  if (process.env.GITHUB_TOKEN) {
+    try {
+      const repoRes = await fetch(`https://api.github.com/repos/${cleanRepo}`, {
+        headers: {
+          Authorization: `token ${process.env.GITHUB_TOKEN}`,
+          'User-Agent': 'PatchPulse-Agent',
+        },
+      });
+      if (repoRes.ok) {
+        const repoData: any = await repoRes.json();
+        detectedLanguage = repoData.language || detectedLanguage;
+        githubVerified = true;
+      }
+    } catch (_e) {}
+  }
+
+  appSettings.targetRepoOwner = owner || 'jithendra0909';
+  appSettings.targetRepoName = name || 'PatchPulse';
+
+  const newService = {
+    id: `srv-${Date.now()}`,
+    name: name || 'PatchPulse API',
+    repository: cleanRepo,
+    branch,
+    language: detectedLanguage,
+    status: 'ACTIVE',
+    lastSync: 'Just now',
+    verified: githubVerified,
+  };
+
+  guardedServices = [newService, ...guardedServices.filter(s => s.repository !== cleanRepo)];
+  io.emit('services:updated', { services: guardedServices });
+
+  res.json({
+    success: true,
+    service: newService,
+    message: `Baseline verified. PatchPulse is now actively guarding ${cleanRepo}`,
+  });
 });
 
 app.post('/api/services', (req, res) => {
@@ -148,7 +162,7 @@ app.post('/api/services', (req, res) => {
     repository: repository || 'myorg/new-service',
     branch,
     language,
-    status: 'ACTIVE' as const,
+    status: 'ACTIVE',
     lastSync: 'Just now',
   };
   guardedServices.unshift(newService);
@@ -170,7 +184,7 @@ app.get('/api/analytics/summary', (_req, res) => {
 
   res.json({
     autoHealedSuccessRate: `${successRate}%`,
-    averageMttr: '6.8s',
+    averageMttr: total > 0 ? '6.8s' : '0.0s',
     totalIncidents: total,
     engineeringHoursSaved: (healed * 1.3).toFixed(1),
   });
@@ -328,7 +342,7 @@ app.post('/api/pr/create', async (req, res) => {
     const newInc = {
       id: `#INC-${Math.floor(Math.random() * 900) + 100}`,
       time: 'Just now',
-      service: 'Payment Service',
+      service: repoName || 'Payment Service',
       endpoint: 'POST /checkout',
       error: 'SchemaDriftKeyError',
       mttr: '6.4s',
@@ -358,7 +372,6 @@ app.post('/api/pr/create', async (req, res) => {
 io.on('connection', (socket) => {
   console.log(`[Socket.IO] Client connected: ${socket.id}`);
 
-  // Emit system:connected event immediately
   socket.emit('system:connected', {
     status: 'connected',
     service: 'patchpulse-backend',

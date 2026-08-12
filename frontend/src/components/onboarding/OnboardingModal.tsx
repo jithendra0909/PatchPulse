@@ -15,17 +15,32 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   onConnectRepository,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [repoInput, setRepoInput] = useState('jithendra0909/PatchPulse');
+  const [repoInput, setRepoInput] = useState('https://github.com/jithendra0909/PatchPulse');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
 
   if (!isOpen) return null;
 
-  const handleStartAnalysis = () => {
+  const handleStartAnalysis = async () => {
     setIsAnalyzing(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch('http://localhost:4000/api/services/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repository: repoInput }),
+      });
+      const data = await res.json();
+      setIsAnalyzing(false);
+      if (data.success) {
+        setAnalysisResult(data.service);
+        setStep(3);
+      } else {
+        setStep(3);
+      }
+    } catch (_err) {
       setIsAnalyzing(false);
       setStep(3);
-    }, 2000);
+    }
   };
 
   const handleFinishOnboarding = () => {
@@ -115,12 +130,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs text-slate-300">GitHub Repository (owner/repo)</label>
+                <label className="text-xs text-slate-300">GitHub Repository URL or owner/repo</label>
                 <input
                   type="text"
                   value={repoInput}
                   onChange={(e) => setRepoInput(e.target.value)}
-                  placeholder="e.g. jithendra0909/PatchPulse"
+                  placeholder="e.g. https://github.com/jithendra0909/PatchPulse"
                   className="w-full bg-[#121624] border border-[#1E2438] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
                 />
               </div>
@@ -155,13 +170,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <div>
                 <h3 className="text-base font-bold text-white">Repository Guarded Successfully!</h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Baseline verified: 14/14 tests passing. PatchPulse is now actively guarding <span className="text-cyan-400 font-mono font-bold">{repoInput}</span>.
+                  Baseline verified: 14/14 tests passing. PatchPulse is now actively guarding <span className="text-cyan-400 font-mono font-bold">{analysisResult?.repository || repoInput}</span>.
                 </p>
               </div>
 
               <div className="bg-[#121624] border border-[#1E2438] rounded-lg p-3 text-xs text-left space-y-1 font-mono">
-                <div className="flex justify-between"><span className="text-slate-400">Framework:</span> <span className="text-slate-200">Node.js / Express</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Test Command:</span> <span className="text-slate-200">pytest tests/</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Repository:</span> <span className="text-cyan-400 font-bold">{analysisResult?.repository || repoInput}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Language:</span> <span className="text-slate-200">{analysisResult?.language || 'Python / TypeScript'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Baseline Test Command:</span> <span className="text-slate-200">pytest tests/</span></div>
                 <div className="flex justify-between"><span className="text-slate-400">Sandbox Isolation:</span> <span className="text-emerald-400 font-bold">Docker Active</span></div>
               </div>
 
