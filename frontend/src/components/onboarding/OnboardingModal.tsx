@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { ShieldCheck, GitBranch, Zap, CheckCircle2, ArrowRight, X } from 'lucide-react';
+import { api } from '../../services/api/client';
 
 interface OnboardingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectDemoMode: () => void;
   onConnectRepository: (repoUrl: string) => void;
 }
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   isOpen,
   onClose,
-  onSelectDemoMode,
   onConnectRepository,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -24,12 +23,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const handleStartAnalysis = async () => {
     setIsAnalyzing(true);
     try {
-      const res = await fetch('/api/services/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repository: repoInput }),
-      });
-      const data = await res.json();
+      const data = await api.connectRepository(repoInput);
       setIsAnalyzing(false);
       if (data.success) {
         setAnalysisResult(data.service);
@@ -88,10 +82,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
                 <button
                   onClick={() => setStep(2)}
-                  className="p-4 bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/50 hover:to-blue-600/50 border border-cyan-500/50 rounded-xl text-left transition-all group cursor-pointer"
+                  className="w-full p-4 bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/50 hover:to-blue-600/50 border border-cyan-500/50 rounded-xl text-left transition-all group cursor-pointer"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <GitBranch className="w-6 h-6 text-cyan-400" />
@@ -100,23 +94,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   <div className="font-bold text-sm text-white">Connect GitHub Repository</div>
                   <div className="text-xs text-slate-400 mt-1">
                     Guard your real microservices & auto-create Pull Requests.
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => {
-                    onSelectDemoMode();
-                    onClose();
-                  }}
-                  className="p-4 bg-[#121624] hover:bg-[#181D30] border border-[#1E2438] hover:border-slate-600 rounded-xl text-left transition-all group cursor-pointer"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <Zap className="w-6 h-6 text-amber-400" />
-                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                  <div className="font-bold text-sm text-white">Explore Demo Mode</div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    Try controlled chaos fault injection on pre-bundled demo API.
                   </div>
                 </button>
               </div>

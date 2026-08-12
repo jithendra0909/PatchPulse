@@ -33,7 +33,6 @@ export function App() {
       <OnboardingModal
         isOpen={isOnboardingOpen}
         onClose={() => setIsOnboardingOpen(false)}
-        onSelectDemoMode={() => setIsOnboardingOpen(false)}
         onConnectRepository={async (repo) => {
           try {
             await api.connectRepository(repo);
