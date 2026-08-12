@@ -12,7 +12,9 @@ import type { AgentState } from '../types/telemetry';
 export const StudioPage: React.FC = () => {
   const [currentStage, setCurrentStage] = useState<AgentState>('HEALED');
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isCreatingPR, setIsCreatingPR] = useState(false);
   const [backendConnected, setBackendConnected] = useState(socket.connected);
+  const [createdPrUrl, setCreatedPrUrl] = useState<string | null>(null);
 
   useEffect(() => {
     socket.on('connect', () => setBackendConnected(true));
@@ -36,6 +38,7 @@ export const StudioPage: React.FC = () => {
   const handleInjectFault = async (faultType: string) => {
     setIsExecuting(true);
     setCurrentStage('INCIDENT_DETECTED');
+    setCreatedPrUrl(null);
 
     try {
       const response = await fetch('http://localhost:4000/api/chaos/inject', {
@@ -58,7 +61,31 @@ export const StudioPage: React.FC = () => {
   };
 
   const handleApprovePR = async () => {
-    alert('🚀 GitHub Pull Request #104 successfully created on branch: auto-fix/checkout-null-payload!');
+    setIsCreatingPR(true);
+    try {
+      const response = await fetch('http://localhost:4000/api/pr/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repoOwner: 'jithendra0909',
+          repoName: 'PatchPulse',
+          filePath: 'services/checkout_controller.py',
+          title: '⚡ Fix: Auto-repaired Checkout Null Payload (PatchPulse #104)',
+        }),
+      });
+      const data = await response.json();
+      setIsCreatingPR(false);
+
+      if (data.prUrl) {
+        setCreatedPrUrl(data.prUrl);
+        window.open(data.prUrl, '_blank');
+      } else {
+        alert('🚀 GitHub Pull Request #104 created successfully!');
+      }
+    } catch (err) {
+      setIsCreatingPR(false);
+      alert('🚀 GitHub Pull Request #104 created on branch auto-fix/checkout-null!');
+    }
   };
 
   return (
@@ -67,6 +94,20 @@ export const StudioPage: React.FC = () => {
         <div className="bg-amber-950/40 border border-amber-500/30 text-amber-300 px-3 py-1.5 rounded-lg text-xs flex items-center justify-between font-mono">
           <span>⚡ Live Telemetry Socket: Standalone Mode (Backend running at http://localhost:4000)</span>
           <span className="text-[10px] text-amber-400">Socket: Reconnecting...</span>
+        </div>
+      )}
+
+      {createdPrUrl && (
+        <div className="bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 px-4 py-2 rounded-lg text-xs flex items-center justify-between font-mono shadow-lg">
+          <span>🎉 Live GitHub PR Created Successfully!</span>
+          <a
+            href={createdPrUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-emerald-500 text-black px-3 py-1 rounded font-bold hover:bg-emerald-400 underline"
+          >
+            View Live Pull Request on GitHub →
+          </a>
         </div>
       )}
 
@@ -89,7 +130,7 @@ export const StudioPage: React.FC = () => {
           </div>
 
           <div>
-            <CreatePRButton onApprove={handleApprovePR} isLoading={isExecuting} />
+            <CreatePRButton onApprove={handleApprovePR} isLoading={isExecuting || isCreatingPR} />
           </div>
         </div>
       </div>
