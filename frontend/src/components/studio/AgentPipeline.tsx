@@ -1,199 +1,94 @@
 import React from 'react';
-import { Target, Brain, Wrench, FlaskConical, Rocket, CheckCircle2 } from 'lucide-react';
-import type { AgentState } from '../../../../shared/types/telemetry';
+import { AlertCircle, FileSearch, Wrench, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import type { AgentState } from '../../types/telemetry';
 
 interface AgentPipelineProps {
   currentStage: AgentState;
-  nodeTimings?: {
-    detect?: string;
-    understand?: string;
-    repair?: string;
-    verify?: string;
-    ship?: string;
-  };
 }
 
-export const AgentPipeline: React.FC<AgentPipelineProps> = ({
-  currentStage,
-  nodeTimings = {
-    detect: '1.23s',
-    understand: '2.84s',
-    repair: '4.15s',
-    verify: '6.48s',
-    ship: 'PR #104',
-  },
-}) => {
-  const isDetectDone = currentStage !== 'IDLE' && currentStage !== 'INCIDENT_DETECTED';
-  const isUnderstandDone = ['PATCH_GENERATING', 'PATCH_VALIDATING', 'SANDBOX_TESTING', 'REGRESSION_TESTING', 'API_REPLAY', 'SAFETY_ANALYSIS', 'AWAITING_APPROVAL', 'PR_CREATING', 'HEALED'].includes(currentStage);
-  const isRepairDone = ['SANDBOX_TESTING', 'REGRESSION_TESTING', 'API_REPLAY', 'SAFETY_ANALYSIS', 'AWAITING_APPROVAL', 'PR_CREATING', 'HEALED'].includes(currentStage);
-  const isVerifyDone = ['SAFETY_ANALYSIS', 'AWAITING_APPROVAL', 'PR_CREATING', 'HEALED'].includes(currentStage);
-  const isShipDone = currentStage === 'HEALED';
+export const AgentPipeline: React.FC<AgentPipelineProps> = ({ currentStage }) => {
+  const stages: { state: AgentState; label: string; sub: string; icon: React.FC<{ className?: string }>; color: string }[] = [
+    { state: 'INCIDENT_DETECTED', label: '1. DETECT', sub: 'Captures 500 error & stack trace', icon: AlertCircle, color: 'red' },
+    { state: 'LOCALIZING', label: '2. UNDERSTAND', sub: 'Tree-sitter AST parses & localizes function', icon: FileSearch, color: 'yellow' },
+    { state: 'PATCH_GENERATING', label: '3. REPAIR', sub: 'Gemini synthesizes code diff', icon: Wrench, color: 'cyan' },
+    { state: 'SANDBOX_TESTING', label: '4. VERIFY', sub: 'Docker runs pytest + API Replay', icon: ShieldCheck, color: 'purple' },
+    { state: 'HEALED', label: '5. SHIP', sub: 'Creates GitHub Pull Request (PR #104)', icon: CheckCircle2, color: 'emerald' },
+  ];
 
-  const isDetectActive = currentStage === 'INCIDENT_DETECTED' || currentStage === 'REPRODUCING';
-  const isUnderstandActive = currentStage === 'DIAGNOSING' || currentStage === 'LOCALIZING' || currentStage === 'CONTEXT_GATHERING';
-  const isRepairActive = currentStage === 'PATCH_GENERATING' || currentStage === 'PATCH_VALIDATING' || currentStage === 'REFLECTION';
-  const isVerifyActive = currentStage === 'SANDBOX_TESTING' || currentStage === 'REGRESSION_TESTING' || currentStage === 'API_REPLAY' || currentStage === 'SAFETY_ANALYSIS';
-  const isShipActive = currentStage === 'AWAITING_APPROVAL' || currentStage === 'PR_CREATING';
+  const getStageIndex = (state: AgentState): number => {
+    switch (state) {
+      case 'INCIDENT_DETECTED': return 0;
+      case 'LOCALIZING': return 1;
+      case 'PATCH_GENERATING': return 2;
+      case 'SANDBOX_TESTING': return 3;
+      case 'HEALED': return 4;
+      default: return -1;
+    }
+  };
+
+  const activeIndex = getStageIndex(currentStage);
 
   return (
-    <div className="bg-[#0D0F17] border border-[#1E2333] rounded-lg p-3 select-none shadow-lg">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-bold tracking-wider text-slate-300 uppercase">
-          Agent Pipeline (Live)
-        </span>
-        <div className="flex items-center space-x-1.5 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] text-emerald-400 font-semibold">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-          <span>Live</span>
+    <div className="bg-[#0D0F17] border border-[#1E2333] rounded-lg p-3 shadow-xl">
+      <div className="flex items-center justify-between mb-3 px-1">
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+            Agent Pipeline (Live Telemetry)
+          </span>
+          <span className="flex items-center space-x-1 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] text-emerald-400 font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Autonomous Active</span>
+          </span>
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-2 py-1 relative">
-        <div className="absolute top-8 left-12 right-12 h-0.5 bg-[#1E2438] -z-0" />
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+        {stages.map((stage, idx) => {
+          const Icon = stage.icon;
+          const isActive = idx === activeIndex;
+          const isPassed = idx < activeIndex || activeIndex === 4;
 
-        {/* Node 1: DETECT */}
-        <div className="flex flex-col items-center z-10 group">
-          <div className="relative">
+          return (
             <div
-              className={`w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                isDetectDone
-                  ? 'bg-[#181119] border-red-500/80 text-red-400 shadow-lg shadow-red-950/50'
-                  : isDetectActive
-                  ? 'bg-red-900/40 border-red-400 text-red-300 animate-pulse shadow-xl shadow-red-500/30'
-                  : 'bg-[#121624] border-[#22293E] text-slate-500'
+              key={stage.state}
+              className={`p-2.5 rounded-lg border transition-all duration-300 relative flex flex-col justify-between ${
+                isActive
+                  ? 'bg-[#151928] border-cyan-400/80 shadow-lg glow-cyan scale-[1.02]'
+                  : isPassed
+                  ? 'bg-[#101320] border-emerald-500/40 text-slate-300'
+                  : 'bg-[#0B0D14] border-[#1C2133] text-slate-500 opacity-70'
               }`}
             >
-              <Target className="w-6 h-6" />
-            </div>
-            {isDetectDone && (
-              <div className="absolute -top-1 -right-1 bg-emerald-500 text-black rounded-full p-0.5">
-                <CheckCircle2 className="w-3.5 h-3.5 fill-black text-emerald-500" />
+              <div className="flex items-center justify-between mb-1.5">
+                <div
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                    isActive
+                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-400/50'
+                      : isPassed
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-500'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                </div>
+                {isPassed && (
+                  <span className="text-[10px] text-emerald-400 font-bold font-mono">
+                    ✓
+                  </span>
+                )}
               </div>
-            )}
-          </div>
-          <div className="mt-2 text-center">
-            <div className="text-xs font-bold text-white tracking-tight">1. DETECT</div>
-            <div className="text-[10px] text-slate-400 max-w-[110px] leading-tight">
-              Captures 500 error & stack trace
-            </div>
-            <div className="text-[10px] font-mono text-red-400 mt-1">{nodeTimings.detect}</div>
-          </div>
-        </div>
 
-        {/* Node 2: UNDERSTAND */}
-        <div className="flex flex-col items-center z-10 group">
-          <div className="relative">
-            <div
-              className={`w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                isUnderstandDone
-                  ? 'bg-[#1A1811] border-amber-500/80 text-amber-400 shadow-lg shadow-amber-950/50'
-                  : isUnderstandActive
-                  ? 'bg-amber-900/40 border-amber-400 text-amber-300 animate-pulse shadow-xl shadow-amber-500/30'
-                  : 'bg-[#121624] border-[#22293E] text-slate-500'
-              }`}
-            >
-              <Brain className="w-6 h-6" />
-            </div>
-            {isUnderstandDone && (
-              <div className="absolute -top-1 -right-1 bg-emerald-500 text-black rounded-full p-0.5">
-                <CheckCircle2 className="w-3.5 h-3.5 fill-black text-emerald-500" />
+              <div>
+                <div className={`text-xs font-bold font-mono ${isActive ? 'text-cyan-400' : isPassed ? 'text-slate-200' : 'text-slate-500'}`}>
+                  {stage.label}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-2">
+                  {stage.sub}
+                </div>
               </div>
-            )}
-          </div>
-          <div className="mt-2 text-center">
-            <div className="text-xs font-bold text-white tracking-tight">2. UNDERSTAND</div>
-            <div className="text-[10px] text-slate-400 max-w-[120px] leading-tight">
-              Tree-sitter AST parses & localizes function
             </div>
-            <div className="text-[10px] font-mono text-amber-400 mt-1">{nodeTimings.understand}</div>
-          </div>
-        </div>
-
-        {/* Node 3: REPAIR */}
-        <div className="flex flex-col items-center z-10 group">
-          <div className="relative">
-            <div
-              className={`w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                isRepairDone
-                  ? 'bg-[#111922] border-cyan-500/80 text-cyan-400 shadow-lg shadow-cyan-950/50'
-                  : isRepairActive
-                  ? 'bg-cyan-900/40 border-cyan-400 text-cyan-300 animate-pulse shadow-xl shadow-cyan-500/30'
-                  : 'bg-[#121624] border-[#22293E] text-slate-500'
-              }`}
-            >
-              <Wrench className="w-6 h-6" />
-            </div>
-            {isRepairDone && (
-              <div className="absolute -top-1 -right-1 bg-emerald-500 text-black rounded-full p-0.5">
-                <CheckCircle2 className="w-3.5 h-3.5 fill-black text-emerald-500" />
-              </div>
-            )}
-          </div>
-          <div className="mt-2 text-center">
-            <div className="text-xs font-bold text-white tracking-tight">3. REPAIR</div>
-            <div className="text-[10px] text-slate-400 max-w-[110px] leading-tight">
-              Gemini synthesizes code diff
-            </div>
-            <div className="text-[10px] font-mono text-cyan-400 mt-1">{nodeTimings.repair}</div>
-          </div>
-        </div>
-
-        {/* Node 4: VERIFY */}
-        <div className="flex flex-col items-center z-10 group">
-          <div className="relative">
-            <div
-              className={`w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                isVerifyDone
-                  ? 'bg-[#181122] border-purple-500/80 text-purple-400 shadow-lg shadow-purple-950/50'
-                  : isVerifyActive
-                  ? 'bg-purple-900/40 border-purple-400 text-purple-300 animate-pulse shadow-xl shadow-purple-500/30'
-                  : 'bg-[#121624] border-[#22293E] text-slate-500'
-              }`}
-            >
-              <FlaskConical className="w-6 h-6" />
-            </div>
-            {isVerifyDone && (
-              <div className="absolute -top-1 -right-1 bg-emerald-500 text-black rounded-full p-0.5">
-                <CheckCircle2 className="w-3.5 h-3.5 fill-black text-emerald-500" />
-              </div>
-            )}
-          </div>
-          <div className="mt-2 text-center">
-            <div className="text-xs font-bold text-white tracking-tight">4. VERIFY</div>
-            <div className="text-[10px] text-slate-400 max-w-[110px] leading-tight">
-              Docker runs pytest + API Replay
-            </div>
-            <div className="text-[10px] font-mono text-purple-400 mt-1">{nodeTimings.verify}</div>
-          </div>
-        </div>
-
-        {/* Node 5: SHIP */}
-        <div className="flex flex-col items-center z-10 group">
-          <div className="relative">
-            <div
-              className={`w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
-                isShipDone
-                  ? 'bg-[#111F18] border-emerald-500/80 text-emerald-400 shadow-lg shadow-emerald-950/50'
-                  : isShipActive
-                  ? 'bg-emerald-900/40 border-emerald-400 text-emerald-300 animate-pulse shadow-xl shadow-emerald-500/30'
-                  : 'bg-[#121624] border-[#22293E] text-slate-500'
-              }`}
-            >
-              <Rocket className="w-6 h-6" />
-            </div>
-            {isShipDone && (
-              <div className="absolute -top-1 -right-1 bg-emerald-500 text-black rounded-full p-0.5">
-                <CheckCircle2 className="w-3.5 h-3.5 fill-black text-emerald-500" />
-              </div>
-            )}
-          </div>
-          <div className="mt-2 text-center">
-            <div className="text-xs font-bold text-white tracking-tight">5. SHIP</div>
-            <div className="text-[10px] text-slate-400 max-w-[110px] leading-tight">
-              Creates GitHub Pull Request
-            </div>
-            <div className="text-[10px] font-mono text-emerald-400 mt-1">{nodeTimings.ship}</div>
-          </div>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
