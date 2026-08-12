@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-app: #08090C;
+    --bg-panel: rgba(13, 15, 23, 0.95);
+    --bg-panel-header: #151824;
+    --bg-input: #101320;
+    
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-active: rgba(0, 240, 255, 0.3);
+    
+    --color-cyan: #00F0FF;
+    --color-green: #10B981;
+    --color-red: #EF4444;
+    --color-yellow: #F59E0B;
+    --color-purple: #A855F7;
+    --color-blue: #3B82F6;
+    
+    --text-main: #F1F5F9;
+    --text-muted: #94A3B8;
+    --text-dim: #64748B;
+  }
+
+  body {
+    background-color: #08090C;
+    color: #F1F5F9;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Glass Panels */
+.glass-panel {
+  background: rgba(13, 15, 23, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+}
+
+.glass-panel-header {
+  background: #151824;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 14px;
+}
+
+/* Glowing Border Effects */
+.glow-cyan {
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.25);
+  border-color: rgba(0, 240, 255, 0.5) !important;
+}
+
+.glow-red {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5) !important;
+}
+
+.glow-green {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.5) !important;
+}
+
+.glow-yellow {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.5) !important;
+}
+
+.glow-purple {
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.25);
+  border-color: rgba(168, 85, 247, 0.5) !important;
+}
+
+/* Terminal Monospace */
+.font-mono-code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
