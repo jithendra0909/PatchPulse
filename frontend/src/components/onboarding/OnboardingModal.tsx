@@ -24,7 +24,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const handleStartAnalysis = async () => {
     setIsAnalyzing(true);
     try {
-      const res = await fetch('http://localhost:4000/api/services/connect', {
+      const res = await fetch('/api/services/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ repository: repoInput }),
