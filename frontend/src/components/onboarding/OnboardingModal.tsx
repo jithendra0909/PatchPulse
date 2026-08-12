@@ -145,17 +145,21 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </div>
 
               <div>
-                <h3 className="text-base font-bold text-white">Repository Guarded Successfully!</h3>
+                <h3 className="text-base font-bold text-white">
+                  {analysisResult ? 'Repository Connected!' : 'Connection Attempted'}
+                </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Baseline verified: 14/14 tests passing. PatchPulse is now actively guarding <span className="text-cyan-400 font-mono font-bold">{analysisResult?.repository || repoInput}</span>.
+                  {analysisResult
+                    ? <>PatchPulse is now guarding <span className="text-cyan-400 font-mono font-bold">{analysisResult?.repository || analysisResult?.fullName || repoInput}</span>.</>
+                    : 'Could not verify repository. Check backend connection and try again.'}
                 </p>
               </div>
 
               <div className="bg-[#121624] border border-[#1E2438] rounded-lg p-3 text-xs text-left space-y-1 font-mono">
-                <div className="flex justify-between"><span className="text-slate-400">Repository:</span> <span className="text-cyan-400 font-bold">{analysisResult?.repository || repoInput}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Language:</span> <span className="text-slate-200">{analysisResult?.language || 'Python / TypeScript'}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Baseline Test Command:</span> <span className="text-slate-200">pytest tests/</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Sandbox Isolation:</span> <span className="text-emerald-400 font-bold">Docker Active</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Repository:</span> <span className="text-cyan-400 font-bold">{analysisResult?.repository || analysisResult?.fullName || repoInput}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Language:</span> <span className="text-slate-200">{analysisResult?.language || 'Unknown'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Status:</span> <span className={`font-bold ${analysisResult?.verified ? 'text-emerald-400' : 'text-amber-400'}`}>{analysisResult?.verified ? 'Verified ✓' : 'Unverified'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Branch:</span> <span className="text-slate-200">{analysisResult?.branch || 'main'}</span></div>
               </div>
 
               <button

@@ -1,7 +1,4 @@
 import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
 
 export interface SandboxExecutionOptions {
   testCommand?: string;
@@ -26,54 +23,89 @@ export class SandboxRunner {
     options: SandboxExecutionOptions = {},
     onLog?: (logLine: string) => void
   ): Promise<SandboxExecutionResult> {
-    const command = options.testCommand || 'pytest tests/test_checkout.py -q --disable-warnings';
+    const command = options.testCommand || 'pytest tests/ -q --disable-warnings';
     const timeoutMs = (options.timeoutSeconds || 15) * 1000;
 
-    console.log(`⚡ [SANDBOX RUNNER] Executing '${command}' in Docker Subprocess Sandbox (Timeout: ${options.timeoutSeconds || 15}s)`);
+    console.log(`⚡ [SANDBOX] Executing '${command}' (Timeout: ${options.timeoutSeconds || 15}s)`);
 
-    const simulatedLogs = [
-      `$ docker run --rm --cpus="${options.cpuLimit || '0.5'}" --memory="${options.memoryLimit || '256m'}" patchpulse-sandbox:latest ${command}`,
-      '==> Establishing isolated container environment...',
-      '==> Mount point: /tmp/patchpulse/sandbox-ephemeral-worktree',
-      '$ pytest tests/test_checkout.py -q --disable-warnings',
-      'tests/test_checkout.py::test_null_payload                    PASSED [ 25%]',
-      'tests/test_checkout.py::test_schema_drift                    PASSED [ 50%]',
-      'tests/test_checkout.py::test_amount_validation              PASSED [ 75%]',
-      'tests/test_checkout.py::test_edge_case_timeout              PASSED [100%]',
-      '======================== 14 passed in 0.42s ========================',
-    ];
+    const startTime = Date.now();
+    const logs: string[] = [];
 
-    if (onLog) {
-      for (const logLine of simulatedLogs) {
-        onLog(logLine);
-        await new Promise((r) => setTimeout(r, 150));
-      }
-    }
+    const addLog = (line: string) => {
+      logs.push(line);
+      if (onLog) onLog(line);
+    };
+
+    addLog(`$ ${command}`);
 
     try {
-      const startTime = Date.now();
-      // Execute command or return isolated sandbox output
+      const result = await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+        exec(command, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+          const exitCode = error ? (error as any).code || 1 : 0;
+          resolve({ stdout: stdout || '', stderr: stderr || '', exitCode });
+        });
+      });
+
       const durationSeconds = parseFloat(((Date.now() - startTime) / 1000).toFixed(2));
 
+      // Log real output
+      if (result.stdout) {
+        for (const line of result.stdout.split('\n').slice(0, 50)) {
+          addLog(line);
+        }
+      }
+      if (result.stderr) {
+        for (const line of result.stderr.split('\n').slice(0, 20)) {
+          addLog(line);
+        }
+      }
+
+      // Parse real test results from output
+      const { passed, failed, total } = this.parseTestOutput(result.stdout + result.stderr);
+
       return {
-        exitCode: 0,
-        stdout: simulatedLogs.join('\n'),
-        stderr: '',
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
         durationSeconds,
-        testsPassed: 14,
-        totalTests: 14,
-        logs: simulatedLogs,
+        testsPassed: passed,
+        totalTests: total,
+        logs,
       };
     } catch (err: any) {
+      const durationSeconds = parseFloat(((Date.now() - startTime) / 1000).toFixed(2));
+      addLog(`[ERROR] ${err.message}`);
+
       return {
         exitCode: 1,
         stdout: '',
         stderr: err.message,
-        durationSeconds: 1.2,
+        durationSeconds,
         testsPassed: 0,
-        totalTests: 14,
-        logs: simulatedLogs,
+        totalTests: 0,
+        logs,
       };
     }
+  }
+
+  private static parseTestOutput(output: string): { passed: number; failed: number; total: number } {
+    let passed = 0;
+    let failed = 0;
+
+    // pytest format: "14 passed in 0.42s"
+    const pytestMatch = output.match(/(\d+)\s+passed/);
+    if (pytestMatch) passed = parseInt(pytestMatch[1], 10);
+
+    const pytestFailMatch = output.match(/(\d+)\s+failed/);
+    if (pytestFailMatch) failed = parseInt(pytestFailMatch[1], 10);
+
+    // npm test / jest format: "Tests: X passed, Y failed"
+    const jestMatch = output.match(/Tests:\s*(\d+)\s+passed/);
+    if (jestMatch) passed = parseInt(jestMatch[1], 10);
+
+    const jestFailMatch = output.match(/Tests:\s*\d+\s+passed,\s*(\d+)\s+failed/);
+    if (jestFailMatch) failed = parseInt(jestFailMatch[1], 10);
+
+    return { passed, failed, total: passed + failed };
   }
 }

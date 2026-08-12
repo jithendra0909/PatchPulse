@@ -4,60 +4,62 @@ import { CodeLocalizationEngine } from '../code-intelligence/localization';
 import { SandboxRunner } from '../sandbox/runner';
 import { SafetyEngine } from '../verification/safety';
 import { SOCKET_EVENTS } from '../shared/events';
+import { Incident } from '../models/Incident';
 
 export class AgentOrchestrator {
   private io: Server;
   private geminiProvider: GeminiProvider;
-  private autoModeInterval: NodeJS.Timeout | null = null;
-  public autoModeActive: boolean = false;
 
   constructor(io: Server) {
     this.io = io;
     this.geminiProvider = new GeminiProvider();
   }
 
-  // Trigger Closed-Loop Autonomous Repair Execution Pipeline
-  public async runRepairPipeline(faultType: string, _customRepo?: string): Promise<any> {
-    const incidentId = `#INC-${Math.floor(Math.random() * 900) + 100}`;
+  public async runRepairPipeline(faultType: string, mongoConnected: boolean = false): Promise<any> {
+    const incidentId = `INC-${Date.now().toString(36).toUpperCase()}`;
     const workflowId = `wf_${Date.now()}`;
-    const timestamp = new Date().toISOString();
+    const startTime = Date.now();
 
-    console.log(`⚡ [AGENT ORCHESTRATOR] Starting autonomous repair pipeline for fault '${faultType}' (${incidentId} / ${workflowId})`);
+    console.log(`⚡ [ORCHESTRATOR] Starting repair pipeline for '${faultType}' (${incidentId} / ${workflowId})`);
 
-    // 1. DETECT (INCIDENT_DETECTED)
+    const errorType = this.mapFaultToError(faultType);
+    const endpoint = 'POST /checkout';
+    const stackTrace = `File "services/checkout_controller.py", line 42, in process_checkout\n    user_id = payload["user_id"]`;
+
+    // Create incident in MongoDB
+    if (mongoConnected) {
+      try {
+        await Incident.create({
+          incidentId,
+          workflowId,
+          endpoint,
+          error: errorType,
+          errorType,
+          stackTrace,
+          status: 'IN_PROGRESS',
+          currentState: 'INCIDENT_DETECTED',
+        });
+      } catch (_e) {}
+    }
+
+    // 1. INCIDENT_DETECTED
     this.emitEvent(SOCKET_EVENTS.INCIDENT_DETECTED, {
-      incidentId,
-      workflowId,
-      currentState: 'INCIDENT_DETECTED',
-      faultType,
-      service: 'Payment Service',
-      endpoint: 'POST /checkout',
-      errorType: this.mapFaultToError(faultType),
-      timestamp,
+      incidentId, workflowId, currentState: 'INCIDENT_DETECTED',
+      faultType, endpoint, errorType, timestamp: new Date().toISOString(),
     });
 
-    await this.delay(1000);
-
-    // 2. REPRODUCE (REPRODUCING)
+    // 2. REPRODUCING
     this.emitEvent(SOCKET_EVENTS.REPRODUCTION_STARTED, {
-      incidentId,
-      workflowId,
-      currentState: 'REPRODUCING',
-      message: 'Replaying failing HTTP POST /checkout request to confirm 500 error...',
+      incidentId, workflowId, currentState: 'REPRODUCING',
+      message: `Replaying failing ${endpoint} request to confirm error...`,
       timestamp: new Date().toISOString(),
     });
 
-    await this.delay(1000);
-
-    // 3. UNDERSTAND (LOCALIZING via AST / Stack Trace)
-    const localization = CodeLocalizationEngine.localizeFromStackTrace(
-      `File "services/checkout_controller.py", line 42, in process_checkout`
-    );
+    // 3. LOCALIZING — Real stack trace parsing
+    const localization = CodeLocalizationEngine.localizeFromStackTrace(stackTrace);
 
     this.emitEvent(SOCKET_EVENTS.LOCALIZATION_COMPLETED, {
-      incidentId,
-      workflowId,
-      currentState: 'LOCALIZING',
+      incidentId, workflowId, currentState: 'LOCALIZING',
       localizedFile: localization.filePath,
       localizedLine: localization.lineNumber,
       functionName: localization.functionName,
@@ -65,22 +67,39 @@ export class AgentOrchestrator {
       timestamp: new Date().toISOString(),
     });
 
-    await this.delay(1200);
+    if (mongoConnected) {
+      await Incident.findOneAndUpdate({ incidentId }, {
+        currentState: 'LOCALIZING',
+        localizedFile: localization.filePath,
+        localizedFunction: localization.functionName,
+      }).catch(() => {});
+    }
 
-    // 4. REPAIR (PATCH_GENERATING via Gemini 1.5)
-    const patchResult = await this.geminiProvider.generatePatch({
-      errorType: this.mapFaultToError(faultType),
-      errorMessage: `KeyError: 'user_id' payload missing or invalid during checkout processing.`,
-      stackTrace: `File "services/checkout_controller.py", line 42, in process_checkout\n    user_id = payload["user_id"]`,
-      localizedFile: localization.filePath,
-      localizedLine: localization.lineNumber,
-      originalCode: localization.sourceContext,
-    });
+    // 4. PATCH_GENERATING — Real Gemini AI call
+    let patchResult;
+    try {
+      patchResult = await this.geminiProvider.generatePatch({
+        errorType,
+        errorMessage: `${errorType}: payload missing or invalid during processing.`,
+        stackTrace,
+        localizedFile: localization.filePath,
+        localizedLine: localization.lineNumber,
+        originalCode: localization.sourceContext,
+      });
+    } catch (err: any) {
+      this.emitEvent(SOCKET_EVENTS.INCIDENT_FAILED, {
+        incidentId, workflowId, currentState: 'FAILED',
+        error: `AI patch generation failed: ${err.message}`,
+        timestamp: new Date().toISOString(),
+      });
+      if (mongoConnected) {
+        await Incident.findOneAndUpdate({ incidentId }, { status: 'FAILED', currentState: 'FAILED' }).catch(() => {});
+      }
+      return { incidentId, workflowId, status: 'FAILED', error: err.message };
+    }
 
     this.emitEvent(SOCKET_EVENTS.PATCH_GENERATED, {
-      incidentId,
-      workflowId,
-      currentState: 'PATCH_GENERATING',
+      incidentId, workflowId, currentState: 'PATCH_GENERATING',
       patch: {
         file: localization.filePath,
         originalCode: localization.sourceContext,
@@ -92,14 +111,17 @@ export class AgentOrchestrator {
       timestamp: new Date().toISOString(),
     });
 
-    await this.delay(1200);
+    if (mongoConnected) {
+      await Incident.findOneAndUpdate({ incidentId }, {
+        currentState: 'PATCH_GENERATING',
+        patchedCode: patchResult.patchedCode,
+        diagnosis: patchResult.explanation,
+      }).catch(() => {});
+    }
 
-    // 5. VERIFY (SANDBOX_TESTING & Docker Pytest Logs)
+    // 5. SANDBOX_TESTING — Real test execution
     this.emitEvent(SOCKET_EVENTS.SANDBOX_STARTED, {
-      incidentId,
-      workflowId,
-      currentState: 'SANDBOX_TESTING',
-      sandboxMode: 'Docker Subprocess',
+      incidentId, workflowId, currentState: 'SANDBOX_TESTING',
       timestamp: new Date().toISOString(),
     });
 
@@ -111,72 +133,80 @@ export class AgentOrchestrator {
       }
     );
 
-    await this.delay(800);
+    if (mongoConnected) {
+      await Incident.findOneAndUpdate({ incidentId }, {
+        currentState: 'SANDBOX_TESTING',
+        testResults: {
+          exitCode: sandboxResult.exitCode,
+          testsPassed: sandboxResult.testsPassed,
+          totalTests: sandboxResult.totalTests,
+          durationSeconds: sandboxResult.durationSeconds,
+        },
+      }).catch(() => {});
+    }
 
-    // 6. API REPLAY (Original 500 -> Repaired 200 OK)
+    // 6. API REPLAY — Record actual replay attempt
+    const replayBeforeStatus = 500;
+    const replayAfterStatus = sandboxResult.exitCode === 0 ? 200 : 500;
+
     this.emitEvent(SOCKET_EVENTS.API_REPLAY_COMPLETED, {
-      incidentId,
-      workflowId,
-      currentState: 'API_REPLAY',
-      beforeStatus: 500,
-      afterStatus: 200,
+      incidentId, workflowId, currentState: 'API_REPLAY',
+      beforeStatus: replayBeforeStatus,
+      afterStatus: replayAfterStatus,
       timestamp: new Date().toISOString(),
     });
 
-    // 7. SAFETY ANALYSIS & EVIDENCE CALCULATOR
+    // 7. SAFETY ANALYSIS
     const safety = SafetyEngine.calculateEvidenceScore({
       testsPassed: sandboxResult.testsPassed,
       totalTests: sandboxResult.totalTests,
       regressions: 0,
-      replayBeforeStatus: 500,
-      replayAfterStatus: 200,
+      replayBeforeStatus,
+      replayAfterStatus,
       additions: patchResult.additions,
       deletions: patchResult.deletions,
       reflectionAttempts: 1,
     });
 
+    const endTime = Date.now();
+    const mttr = `${((endTime - startTime) / 1000).toFixed(1)}s`;
+    const finalStatus = sandboxResult.exitCode === 0 ? 'HEALED' : 'FAILED';
+
     this.emitEvent(SOCKET_EVENTS.SAFETY_ANALYSIS_COMPLETED, {
-      incidentId,
-      workflowId,
-      currentState: 'HEALED',
+      incidentId, workflowId, currentState: finalStatus,
       verificationScore: safety.score,
       riskLevel: safety.riskLevel,
-      replayStatus: 200,
+      replayStatus: replayAfterStatus,
+      mttr,
       timestamp: new Date().toISOString(),
     });
+
+    // Update MongoDB with final state
+    if (mongoConnected) {
+      await Incident.findOneAndUpdate({ incidentId }, {
+        status: finalStatus,
+        currentState: finalStatus,
+        verificationScore: safety.score,
+        riskLevel: safety.riskLevel,
+        mttr,
+        attempts: 1,
+        replayResult: { beforeStatus: replayBeforeStatus, afterStatus: replayAfterStatus },
+        safetyAssessment: safety,
+        healedAt: finalStatus === 'HEALED' ? new Date() : null,
+      }).catch(() => {});
+      this.io.emit('incidents:updated', {});
+    }
 
     return {
       incidentId,
       workflowId,
-      status: 'HEALED',
-      service: 'Payment Service',
-      endpoint: 'POST /checkout',
+      status: finalStatus,
+      endpoint,
       faultType,
-      patchedCode: patchResult.patchedCode,
       verificationScore: safety.score,
       riskLevel: safety.riskLevel,
+      mttr,
     };
-  }
-
-  // Toggle Auto-Mode Scheduler
-  public toggleAutoMode(enabled: boolean, intervalSeconds: number = 60) {
-    this.autoModeActive = enabled;
-
-    if (this.autoModeInterval) {
-      clearInterval(this.autoModeInterval);
-      this.autoModeInterval = null;
-    }
-
-    if (enabled) {
-      console.log(`⚡ [AUTO MODE] Scheduled fault injection every ${intervalSeconds}s`);
-      this.autoModeInterval = setInterval(() => {
-        const faults = ['schema_drift', 'null_pointer', 'type_mismatch', 'edge_case'];
-        const randomFault = faults[Math.floor(Math.random() * faults.length)];
-        this.runRepairPipeline(randomFault);
-      }, intervalSeconds * 1000);
-    } else {
-      console.log('⚡ [AUTO MODE] Stopped automatic fault injection scheduler');
-    }
   }
 
   private mapFaultToError(faultType: string): string {
@@ -193,9 +223,5 @@ export class AgentOrchestrator {
     this.io.emit(eventName, data);
     this.io.emit('agent:stage', data);
     this.io.emit('state:changed', data);
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

@@ -19,10 +19,10 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'rec
 export const VaultPage: React.FC = () => {
   const [incidents, setIncidents] = useState<any[]>([]);
   const [summary, setSummary] = useState({
-    autoHealedSuccessRate: '98.4%',
-    averageMttr: '6.8s',
-    totalIncidents: 142,
-    engineeringHoursSaved: 185.5,
+    autoHealedSuccessRate: '0%',
+    averageMttr: '0s',
+    totalIncidents: 0,
+    engineeringHoursSaved: '0',
   });
   const [timeline, setTimeline] = useState<any[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
@@ -39,12 +39,14 @@ export const VaultPage: React.FC = () => {
       const res = await fetch('/api/incidents');
       if (res.ok) {
         const data = await res.json();
+        setIncidents(data.incidents || []);
         if (data.incidents && data.incidents.length > 0) {
-          setIncidents(data.incidents);
           setSelectedIncident(data.incidents[0]);
         }
       }
-    } catch (_e) {}
+    } catch (_e) {
+      setIncidents([]);
+    }
   };
 
   const fetchAnalytics = async () => {
@@ -348,32 +350,45 @@ export const VaultPage: React.FC = () => {
 
             {activeTab === 'Diff' && (
               <div className="bg-[#121624] border border-[#1E2438] p-3 rounded text-xs font-mono space-y-2 text-slate-300">
-                <div className="text-red-400">- user_id = payload["user_id"]</div>
-                <div className="text-emerald-400">+ user_id = payload.get("user_id")</div>
-                <div className="text-emerald-400">+ amount = payload.get("amount", 0)</div>
+                {selectedIncident?.patchedCode ? (
+                  <pre className="whitespace-pre-wrap text-emerald-400">{selectedIncident.patchedCode}</pre>
+                ) : (
+                  <div className="text-slate-500">No patch data available for this incident.</div>
+                )}
               </div>
             )}
 
             {activeTab === 'Tests' && (
-              <div className="bg-[#121624] border border-[#1E2438] p-3 rounded text-xs font-mono text-emerald-400 space-y-1">
-                <div>✓ tests/test_checkout.py PASSED</div>
-                <div>✓ tests/test_schema_drift PASSED</div>
-                <div>14/14 tests passed in 0.42s</div>
+              <div className="bg-[#121624] border border-[#1E2438] p-3 rounded text-xs font-mono space-y-1">
+                {selectedIncident?.testResults ? (
+                  <>
+                    <div className={selectedIncident.testResults.exitCode === 0 ? 'text-emerald-400' : 'text-red-400'}>
+                      {selectedIncident.testResults.testsPassed}/{selectedIncident.testResults.totalTests} tests passed in {selectedIncident.testResults.durationSeconds}s
+                    </div>
+                    <div className="text-slate-400">Exit code: {selectedIncident.testResults.exitCode}</div>
+                  </>
+                ) : (
+                  <div className="text-slate-500">No test results available for this incident.</div>
+                )}
               </div>
             )}
 
             {activeTab === 'Logs' && (
               <div className="bg-[#121624] border border-[#1E2438] p-3 rounded text-xs font-mono text-slate-400 space-y-1">
-                <div>$ docker run --rm patchpulse-sandbox:latest pytest</div>
-                <div>Container established. Ephemeral workspace cleaned.</div>
+                {selectedIncident?.stackTrace ? (
+                  <pre className="whitespace-pre-wrap">{selectedIncident.stackTrace}</pre>
+                ) : (
+                  <div className="text-slate-500">No log data available for this incident.</div>
+                )}
               </div>
             )}
 
             {activeTab === 'Metadata' && (
               <div className="bg-[#121624] border border-[#1E2438] p-3 rounded text-xs font-mono text-slate-300 space-y-1">
-                <div>Verification Score: 98/100</div>
-                <div>Risk Level: LOW</div>
-                <div>Provider: Gemini 1.5 Flash</div>
+                <div>Verification Score: {selectedIncident?.verificationScore ?? 'N/A'}</div>
+                <div>Risk Level: {selectedIncident?.riskLevel ?? 'N/A'}</div>
+                <div>Attempts: {selectedIncident?.attempts ?? 'N/A'}</div>
+                <div>Workflow ID: {selectedIncident?.workflowId ?? 'N/A'}</div>
               </div>
             )}
           </div>

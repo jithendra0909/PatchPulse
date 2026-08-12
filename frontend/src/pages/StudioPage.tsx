@@ -7,103 +7,100 @@ import { ApiReplayCard } from '../components/studio/ApiReplayCard';
 import { SafetyEvidence } from '../components/studio/SafetyEvidence';
 import { CreatePRButton } from '../components/studio/CreatePRButton';
 import { socket } from '../services/socket';
+import { api } from '../services/api/client';
 import type { AgentState } from '../types/telemetry';
 
 export function StudioPage() {
-  const [currentStage, setCurrentStage] = useState<AgentState>('HEALED');
+  const [currentStage, setCurrentStage] = useState<AgentState>('IDLE');
   const [isExecuting, setIsExecuting] = useState(false);
   const [isCreatingPR, setIsCreatingPR] = useState(false);
   const [createdPrUrl, setCreatedPrUrl] = useState<string | null>(null);
+  const [socketConnected, setSocketConnected] = useState(socket.connected);
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
 
   useEffect(() => {
     const handleStage = (data: any) => {
       if (data.currentState) {
         setCurrentStage(data.currentState as AgentState);
+        if (data.currentState === 'HEALED' || data.currentState === 'FAILED') {
+          setIsExecuting(false);
+        }
       }
     };
 
+    const handleLog = (data: any) => {
+      if (data.log) {
+        setTerminalLogs(prev => [...prev, data.log]);
+      }
+    };
+
+    const handleConnect = () => setSocketConnected(true);
+    const handleDisconnect = () => setSocketConnected(false);
+
     socket.on('agent:stage', handleStage);
+    socket.on('verification:log', handleLog);
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
 
     return () => {
       socket.off('agent:stage', handleStage);
+      socket.off('verification:log', handleLog);
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
     };
   }, []);
 
   const handleInjectFault = async (faultType: string) => {
     setIsExecuting(true);
     setCreatedPrUrl(null);
+    setTerminalLogs([]);
     setCurrentStage('INCIDENT_DETECTED');
 
     try {
-      const res = await fetch('/api/chaos/inject', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ faultType }),
-      });
-      if (res.ok) {
-        setTimeout(() => setCurrentStage('LOCALIZING'), 1200);
-        setTimeout(() => setCurrentStage('PATCH_GENERATING'), 2600);
-        setTimeout(() => setCurrentStage('SANDBOX_TESTING'), 4100);
-        setTimeout(() => {
-          setCurrentStage('HEALED');
-          setIsExecuting(false);
-        }, 5800);
-      } else {
-        runSimulatedRepair();
-      }
-    } catch (_err) {
-      runSimulatedRepair();
-    }
-  };
-
-  const runSimulatedRepair = () => {
-    setTimeout(() => setCurrentStage('LOCALIZING'), 1200);
-    setTimeout(() => setCurrentStage('PATCH_GENERATING'), 2600);
-    setTimeout(() => setCurrentStage('SANDBOX_TESTING'), 4100);
-    setTimeout(() => {
-      setCurrentStage('HEALED');
+      await api.injectChaos(faultType);
+      // Pipeline state driven entirely by Socket.IO events — no setTimeout
+    } catch (err: any) {
       setIsExecuting(false);
-    }, 5800);
+      setCurrentStage('FAILED');
+      setTerminalLogs(prev => [...prev, `[ERROR] Backend request failed: ${err.message}`]);
+    }
   };
 
   const handleCreatePR = async () => {
     setIsCreatingPR(true);
     try {
-      const res = await fetch('/api/pr/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          repoOwner: 'jithendra0909',
-          repoName: 'PatchPulse',
-          filePath: 'services/checkout_controller.py',
-          title: '⚡ Fix: Auto-repaired Checkout Null Payload (PatchPulse #104)',
-        }),
+      const data = await api.createPullRequest({
+        repoOwner: 'jithendra0909',
+        repoName: 'PatchPulse',
+        filePath: 'services/checkout_controller.py',
+        title: '⚡ PatchPulse Auto-Repair',
       });
-      const data = await res.json();
       setIsCreatingPR(false);
       if (data.prUrl) {
         setCreatedPrUrl(data.prUrl);
         window.open(data.prUrl, '_blank');
-      } else {
-        alert('🚀 GitHub Pull Request #104 created successfully!');
       }
-    } catch (_err) {
+    } catch (err: any) {
       setIsCreatingPR(false);
-      const prUrl = 'https://github.com/jithendra0909/PatchPulse/pull/1';
-      setCreatedPrUrl(prUrl);
-      window.open(prUrl, '_blank');
+      setTerminalLogs(prev => [...prev, `[ERROR] PR creation failed: ${err.message}`]);
     }
   };
 
   return (
     <div className="flex flex-col gap-3 p-4 max-w-[1700px] mx-auto min-h-[calc(100vh-64px-36px)] justify-between select-none">
-      {/* Telemetry Status Banner */}
-      <div className="bg-[#101422] border border-[#1E2438] text-slate-300 px-3 py-1.5 rounded-lg text-xs flex items-center justify-between font-mono">
+      {/* Real Socket.IO Connection Status */}
+      <div className={`bg-[#101422] border ${socketConnected ? 'border-emerald-500/30' : 'border-red-500/30'} text-slate-300 px-3 py-1.5 rounded-lg text-xs flex items-center justify-between font-mono`}>
         <div className="flex items-center space-x-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>⚡ Live Telemetry Socket: Connected (Agent Listening)</span>
+          <span className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+          <span>
+            {socketConnected
+              ? '⚡ Live Telemetry Socket: Connected (Agent Listening)'
+              : '⚠️ Socket Disconnected — Attempting to reconnect...'}
+          </span>
         </div>
-        <span className="text-[10px] text-cyan-400">WebSocket: Active</span>
+        <span className={`text-[10px] ${socketConnected ? 'text-cyan-400' : 'text-red-400'}`}>
+          WebSocket: {socketConnected ? 'Active' : 'Disconnected'}
+        </span>
       </div>
 
       {createdPrUrl && (
@@ -129,7 +126,7 @@ export function StudioPage() {
         </div>
 
         <div className="lg:col-span-5 flex flex-col gap-3 h-full">
-          <TerminalPanel />
+          <TerminalPanel logs={terminalLogs} />
           <ApiReplayCard />
           <SafetyEvidence />
           <CreatePRButton onApprove={handleCreatePR} isLoading={isCreatingPR} />

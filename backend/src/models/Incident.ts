@@ -1,99 +1,72 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type AgentStage =
-  | 'IDLE'
-  | 'INJECTING'
-  | 'DETECTED'
-  | 'ANALYZING'
-  | 'LOCALIZING'
-  | 'PATCHING'
-  | 'VERIFYING'
-  | 'REFLECTING'
-  | 'VERIFIED'
-  | 'AWAITING_APPROVAL'
-  | 'PR_CREATING'
-  | 'RESOLVED'
-  | 'FAILED';
-
 export interface IIncident extends Document {
   incidentId: string;
-  status: 'OPEN' | 'IN_PROGRESS' | 'HEALED' | 'FAILED';
-  currentStage: AgentStage;
-  service: string;
+  workflowId: string;
+  repositoryId: string;
+  repositoryFullName: string;
+  method: string;
   endpoint: string;
+  error: string;
   errorType: string;
-  errorMessage: string;
   stackTrace: string;
-  payload: Record<string, any>;
-  rootCause?: string;
-  localizedFile?: string;
-  localizedLine?: number;
-  patch?: {
-    originalCode: string;
-    patchedCode: string;
-    explanation: string;
-    additions: number;
-    deletions: number;
-  };
-  verification?: {
-    score: number;
-    riskLevel: string;
-    testsPassed: number;
-    totalTests: number;
-    regressions: number;
-    replayBeforeStatus: number;
-    replayAfterStatus: number;
-    logs: string[];
-  };
-  pr?: {
-    number: number;
-    url: string;
-    branch: string;
-  };
-  retryCount: number;
+  observedStatus: number;
+  expectedStatus: number;
+  requestBody: any;
+  status: 'OPEN' | 'IN_PROGRESS' | 'HEALED' | 'FAILED' | 'CANCELLED';
+  currentState: string;
+  mttr: string;
+  prNumber: number | null;
+  prUrl: string | null;
+  branchName: string | null;
+  verificationScore: number | null;
+  riskLevel: string | null;
+  patchedCode: string | null;
+  diagnosis: string | null;
+  localizedFile: string | null;
+  localizedFunction: string | null;
+  testResults: any;
+  replayResult: any;
+  safetyAssessment: any;
+  attempts: number;
   createdAt: Date;
   updatedAt: Date;
+  healedAt: Date | null;
 }
 
 const IncidentSchema = new Schema<IIncident>(
   {
-    incidentId: { type: String, required: true, unique: true, index: true },
-    status: { type: String, enum: ['OPEN', 'IN_PROGRESS', 'HEALED', 'FAILED'], default: 'OPEN' },
-    currentStage: { type: String, default: 'IDLE' },
-    service: { type: String, required: true },
+    incidentId: { type: String, required: true, unique: true },
+    workflowId: { type: String, required: true },
+    repositoryId: { type: String, default: '' },
+    repositoryFullName: { type: String, default: '' },
+    method: { type: String, default: 'POST' },
     endpoint: { type: String, required: true },
-    errorType: { type: String, required: true },
-    errorMessage: { type: String, required: true },
+    error: { type: String, required: true },
+    errorType: { type: String, default: '' },
     stackTrace: { type: String, default: '' },
-    payload: { type: Schema.Types.Mixed, default: {} },
-    rootCause: { type: String },
-    localizedFile: { type: String },
-    localizedLine: { type: Number },
-    patch: {
-      originalCode: String,
-      patchedCode: String,
-      explanation: String,
-      additions: Number,
-      deletions: Number,
-    },
-    verification: {
-      score: Number,
-      riskLevel: String,
-      testsPassed: Number,
-      totalTests: Number,
-      regressions: Number,
-      replayBeforeStatus: Number,
-      replayAfterStatus: Number,
-      logs: [String],
-    },
-    pr: {
-      number: Number,
-      url: String,
-      branch: String,
-    },
-    retryCount: { type: Number, default: 0 },
+    observedStatus: { type: Number, default: 500 },
+    expectedStatus: { type: Number, default: 200 },
+    requestBody: { type: Schema.Types.Mixed, default: {} },
+    status: { type: String, enum: ['OPEN', 'IN_PROGRESS', 'HEALED', 'FAILED', 'CANCELLED'], default: 'OPEN' },
+    currentState: { type: String, default: 'INCIDENT_DETECTED' },
+    mttr: { type: String, default: '' },
+    prNumber: { type: Number, default: null },
+    prUrl: { type: String, default: null },
+    branchName: { type: String, default: null },
+    verificationScore: { type: Number, default: null },
+    riskLevel: { type: String, default: null },
+    patchedCode: { type: String, default: null },
+    diagnosis: { type: String, default: null },
+    localizedFile: { type: String, default: null },
+    localizedFunction: { type: String, default: null },
+    testResults: { type: Schema.Types.Mixed, default: null },
+    replayResult: { type: Schema.Types.Mixed, default: null },
+    safetyAssessment: { type: Schema.Types.Mixed, default: null },
+    attempts: { type: Number, default: 0 },
+    healedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-export const IncidentModel = mongoose.model<IIncident>('Incident', IncidentSchema);
+export const Incident = mongoose.model<IIncident>('Incident', IncidentSchema);

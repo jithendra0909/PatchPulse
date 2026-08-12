@@ -9,11 +9,10 @@ export class GeminiProvider implements AIProvider {
   }
 
   public async generatePatch(request: AIPatchRequest): Promise<AIPatchResponse> {
-    console.log(`⚡ [AI ENGINE] Calling Gemini 1.5 for code localization on ${request.localizedFile}:${request.localizedLine}`);
+    console.log(`⚡ [AI ENGINE] Calling Gemini 1.5 for ${request.localizedFile}:${request.localizedLine}`);
 
-    if (!this.apiKey || this.apiKey.includes('YOUR_GEMINI_API_KEY')) {
-      console.warn('⚠️ [AI ENGINE] GEMINI_API_KEY not configured. Falling back to deterministic agent synthesis.');
-      return this.fallbackPatch(request);
+    if (!this.apiKey) {
+      throw new Error('GEMINI_API_KEY not configured. AI patch generation unavailable.');
     }
 
     try {
@@ -44,36 +43,40 @@ Return ONLY a JSON object with keys: "explanation", "patchedCode", "additions", 
       );
 
       if (!response.ok) {
-        throw new Error(`Gemini API returned status ${response.status}`);
+        const errorBody = await response.text();
+        throw new Error(`Gemini API returned status ${response.status}: ${errorBody.substring(0, 200)}`);
       }
 
       const data: any = await response.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!rawText) {
+        throw new Error('Gemini returned empty response. No candidates available.');
+      }
+
       const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
+
+      let parsed;
+      try {
+        parsed = JSON.parse(cleanJson);
+      } catch (_e) {
+        throw new Error('Gemini returned non-JSON response. Unable to parse patch.');
+      }
+
+      if (!parsed.patchedCode) {
+        throw new Error('Gemini response missing "patchedCode" field.');
+      }
 
       return {
-        explanation: parsed.explanation || 'Defensive schema validation added.',
-        patchedCode: parsed.patchedCode || request.originalCode,
-        confidence: 0.98,
-        additions: parsed.additions || 6,
-        deletions: parsed.deletions || 2,
+        explanation: parsed.explanation || 'AI-generated repair applied.',
+        patchedCode: parsed.patchedCode,
+        confidence: 0.0, // Not used — verification score replaces this
+        additions: parsed.additions || 0,
+        deletions: parsed.deletions || 0,
       };
     } catch (err: any) {
-      console.warn('[GEMINI AI REPAIR WARNING]', err.message);
-      return this.fallbackPatch(request);
+      console.error('[GEMINI ERROR]', err.message);
+      throw err; // Propagate — do NOT return fake data
     }
-  }
-
-  private fallbackPatch(request: AIPatchRequest): AIPatchResponse {
-    const patchedCode = `def process_checkout(payload):\n    if not payload or not isinstance(payload, dict):\n        return {"status": "error", "code": 400, "message": "Invalid payload format"}\n    \n    user_id = payload.get("user_id")\n    if not user_id:\n        return {"status": "error", "code": 400, "message": "user_id is required"}\n    \n    amount = payload.get("amount", 0)\n    return {"status": "success", "user_id": user_id, "amount": amount}`;
-
-    return {
-      explanation: 'Added defensive schema validation and key retrieval with fallback defaults.',
-      patchedCode,
-      confidence: 0.98,
-      additions: 6,
-      deletions: 2,
-    };
   }
 }

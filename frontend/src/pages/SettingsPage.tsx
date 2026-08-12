@@ -77,24 +77,23 @@ export const SettingsPage: React.FC = () => {
         setTimeout(() => setIsSaved(false), 3000);
       }
     } catch (_e) {
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 3000);
+      // Save failed — do not show success indicator
     }
   };
 
   const handleAddService = async () => {
-    const repo = prompt('Enter GitHub Repository (e.g. jithendra0909/order-service):', 'jithendra0909/order-service');
+    const repo = prompt('Enter GitHub Repository (e.g. owner/repo-name):', '');
     if (!repo) return;
 
     try {
-      const res = await fetch('/api/services', {
+      const res = await fetch('/api/services/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repository: repo, name: repo.split('/')[1] || repo }),
+        body: JSON.stringify({ repository: repo, branch: 'main' }),
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.services) setServices(data.services);
+        // Refresh services list
+        fetchServices();
       }
     } catch (_e) {}
   };

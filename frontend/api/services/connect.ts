@@ -1,49 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+const BACKEND_URL = process.env.BACKEND_URL || '';
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
-  const { repository = 'jithendra0909/PatchPulse', branch = 'main' } = req.body || {};
-  const cleanRepo = repository.replace('https://github.com/', '').replace('.git', '');
-  const [owner, name] = cleanRepo.split('/');
-
-  let detectedLanguage = 'TypeScript / Python';
-  let githubVerified = false;
-
-  const githubToken = process.env.GITHUB_TOKEN;
-
-  if (githubToken) {
+  if (BACKEND_URL) {
     try {
-      const repoRes = await fetch(`https://api.github.com/repos/${cleanRepo}`, {
-        headers: {
-          Authorization: `token ${githubToken}`,
-          'User-Agent': 'PatchPulse-Agent',
-        },
+      const response = await fetch(`${BACKEND_URL}/api/services/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body || {}),
       });
-      if (repoRes.ok) {
-        const repoData: any = await repoRes.json();
-        detectedLanguage = repoData.language || detectedLanguage;
-        githubVerified = true;
-      }
-    } catch (_e) {}
+      const data = await response.json();
+      return res.status(response.status).json(data);
+    } catch (err: any) {
+      return res.status(502).json({ success: false, error: `Backend unreachable: ${err.message}` });
+    }
   }
 
-  const newService = {
-    id: `srv-${Date.now()}`,
-    name: name || 'PatchPulse Guarded API',
-    repository: cleanRepo,
-    branch,
-    language: detectedLanguage,
-    status: 'ACTIVE',
-    lastSync: 'Just now',
-    verified: githubVerified,
-  };
-
-  return res.status(200).json({
-    success: true,
-    service: newService,
-    message: `Baseline verified. PatchPulse is now actively guarding ${cleanRepo}`,
+  return res.status(503).json({
+    success: false,
+    error: 'BACKEND_URL not configured. Cannot connect repository without real backend.',
   });
 }

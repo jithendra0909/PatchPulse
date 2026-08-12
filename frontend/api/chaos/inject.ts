@@ -1,21 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  const { faultType = 'schema_drift' } = req.body || {};
+const BACKEND_URL = process.env.BACKEND_URL || '';
 
-  const incidentId = `#INC-${Math.floor(Math.random() * 900) + 100}`;
-  const timestamp = new Date().toISOString();
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (BACKEND_URL) {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/chaos/inject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body || {}),
+      });
+      const data = await response.json();
+      return res.status(response.status).json(data);
+    } catch (err: any) {
+      return res.status(502).json({ success: false, error: `Backend unreachable: ${err.message}` });
+    }
+  }
 
-  return res.status(200).json({
-    success: true,
-    result: {
-      incidentId,
-      status: 'HEALED',
-      service: 'Payment Service',
-      endpoint: 'POST /checkout',
-      faultType,
-      verificationScore: 98,
-      timestamp,
-    },
+  return res.status(503).json({
+    success: false,
+    error: 'BACKEND_URL not configured. Chaos injection requires real backend with orchestrator.',
   });
 }

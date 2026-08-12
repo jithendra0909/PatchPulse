@@ -16,14 +16,15 @@ export interface ISettings extends Document {
   topP: number;
   autoModeEnabled: boolean;
   autoModeIntervalSeconds: number;
+  updatedAt: Date;
 }
 
 const SettingsSchema = new Schema<ISettings>(
   {
-    targetRepoOwner: { type: String, default: 'jithendra0909' },
-    targetRepoName: { type: String, default: 'PatchPulse' },
+    targetRepoOwner: { type: String, default: '' },
+    targetRepoName: { type: String, default: '' },
     testCommand: { type: String, default: 'pytest tests/ --maxfail=1 -q' },
-    executionMode: { type: String, default: 'Docker Subprocess' },
+    executionMode: { type: String, default: 'Docker Subprocess (Isolated)' },
     timeoutSeconds: { type: Number, default: 15 },
     cpuLimit: { type: String, default: '0.5 CPU' },
     memoryLimit: { type: String, default: '256 MB' },
@@ -39,4 +40,4 @@ const SettingsSchema = new Schema<ISettings>(
   { timestamps: true }
 );
 
-export const SettingsModel = mongoose.model<ISettings>('Settings', SettingsSchema);
+export const Settings = mongoose.model<ISettings>('Settings', SettingsSchema);
