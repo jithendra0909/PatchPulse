@@ -3,6 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 import { AgentOrchestrator } from './agent/Orchestrator';
 
 dotenv.config();
@@ -13,16 +14,30 @@ const io = new Server(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true,
   },
 });
 
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
 const orchestrator = new AgentOrchestrator(io);
 
-// Dynamic In-Memory Store (with MongoDB Fallback Sync)
+let mongoConnected = false;
+if (process.env.MONGODB_URI) {
+  mongoose
+    .connect(process.env.MONGODB_URI)
+    .then(() => {
+      mongoConnected = true;
+      console.log('⚡ [DATABASE] MongoDB Atlas Connected Successfully');
+    })
+    .catch((err) => {
+      console.warn('⚠️ [DATABASE] MongoDB Connection warning:', err.message);
+    });
+}
+
+// In-Memory Microservices Store
 let guardedServices = [
   { id: 'srv-1', name: 'Payment Service', repository: 'jithendra0909/PatchPulse', branch: 'main', language: 'Python', status: 'ACTIVE', lastSync: '2m ago' },
   { id: 'srv-2', name: 'User Service', repository: 'jithendra0909/user-service', branch: 'main', language: 'Python', status: 'ACTIVE', lastSync: '5m ago' },
@@ -64,18 +79,6 @@ let incidentsStore: any[] = [
       ],
     },
   },
-  {
-    id: '#INC-93',
-    time: '1 hour ago',
-    service: 'User Service',
-    endpoint: 'GET /user/profile',
-    error: 'NullPointerExpression',
-    mttr: '7.1s',
-    status: 'Healed',
-    pr: 'PR #103',
-    prUrl: '#',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
 ];
 
 let appSettings = {
@@ -96,7 +99,20 @@ let appSettings = {
   autoModeIntervalSeconds: 60,
 };
 
-// 1. Dynamic System Health & Guarded Services Count Endpoint
+// 1. Health Endpoints
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'patchpulse-backend',
+    agent: 'ready',
+    database: mongoConnected,
+    socket: true,
+    microservicesGuarded: guardedServices.length,
+    hasGeminiKey: !!process.env.GEMINI_API_KEY,
+    hasGitHubToken: !!process.env.GITHUB_TOKEN,
+  });
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'healthy',
@@ -146,7 +162,7 @@ app.delete('/api/services/:id', (req, res) => {
   res.json({ success: true, services: guardedServices });
 });
 
-// 3. Dynamic Analytics & KPI Metrics Endpoint
+// 3. Dynamic Analytics Endpoints
 app.get('/api/analytics/summary', (_req, res) => {
   const total = incidentsStore.length;
   const healed = incidentsStore.filter(i => i.status === 'Healed').length;
@@ -340,13 +356,22 @@ app.post('/api/pr/create', async (req, res) => {
 
 // Socket.IO Connection Handler
 io.on('connection', (socket) => {
-  console.log(`[TELEMETRY] Client connected: ${socket.id}`);
+  console.log(`[Socket.IO] Client connected: ${socket.id}`);
+
+  // Emit system:connected event immediately
+  socket.emit('system:connected', {
+    status: 'connected',
+    service: 'patchpulse-backend',
+    agent: 'ready',
+    timestamp: new Date().toISOString(),
+  });
 
   socket.on('disconnect', () => {
-    console.log(`[TELEMETRY] Client disconnected: ${socket.id}`);
+    console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
   });
 });
 
 server.listen(PORT, () => {
   console.log(`⚡ PatchPulse Agent Engine running on http://localhost:${PORT}`);
+  console.log(`📡 Socket.IO server active on http://localhost:${PORT}`);
 });

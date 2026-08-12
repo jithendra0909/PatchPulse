@@ -12,18 +12,31 @@ import type { AgentState } from '../types/telemetry';
 export function StudioPage() {
   const [currentStage, setCurrentStage] = useState<AgentState>('HEALED');
   const [isExecuting, setIsExecuting] = useState(false);
+  const [backendConnected, setBackendConnected] = useState(socket.connected);
   const [isCreatingPR, setIsCreatingPR] = useState(false);
   const [createdPrUrl, setCreatedPrUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    socket.on('agent:stage', (data: any) => {
+    const handleConnect = () => setBackendConnected(true);
+    const handleDisconnect = () => setBackendConnected(false);
+    const handleStage = (data: any) => {
       if (data.currentState) {
         setCurrentStage(data.currentState as AgentState);
       }
-    });
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('system:connected', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('agent:stage', handleStage);
+
+    if (socket.connected) setBackendConnected(true);
 
     return () => {
-      socket.off('agent:stage');
+      socket.off('connect', handleConnect);
+      socket.off('system:connected', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('agent:stage', handleStage);
     };
   }, []);
 
@@ -95,14 +108,24 @@ export function StudioPage() {
 
   return (
     <div className="flex flex-col gap-3 p-4 max-w-[1700px] mx-auto min-h-[calc(100vh-64px-36px)] justify-between select-none">
-      {/* Telemetry Status Pill */}
-      <div className="bg-[#101422] border border-[#1E2438] text-slate-300 px-3 py-1.5 rounded-lg text-xs flex items-center justify-between font-mono">
-        <div className="flex items-center space-x-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>⚡ Live Telemetry Socket: Connected (Production Telemetry Engine)</span>
+      {/* Telemetry Status Banner */}
+      {backendConnected ? (
+        <div className="bg-[#101422] border border-[#1E2438] text-slate-300 px-3 py-1.5 rounded-lg text-xs flex items-center justify-between font-mono">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>⚡ Live Telemetry Socket: Connected (Agent Listening)</span>
+          </div>
+          <span className="text-[10px] text-cyan-400">WebSocket: Active</span>
         </div>
-        <span className="text-[10px] text-cyan-400">WebSocket: Active</span>
-      </div>
+      ) : (
+        <div className="bg-amber-950/40 border border-amber-500/30 text-amber-300 px-3 py-1.5 rounded-lg text-xs flex items-center justify-between font-mono">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span>⚡ Live Telemetry Socket: Reconnecting to Backend (http://localhost:4000)...</span>
+          </div>
+          <span className="text-[10px] text-amber-400 font-bold">Standalone Mode</span>
+        </div>
+      )}
 
       {createdPrUrl && (
         <div className="bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 px-4 py-2 rounded-lg text-xs flex items-center justify-between font-mono shadow-lg">
