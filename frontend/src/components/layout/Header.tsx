@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Zap, Command } from 'lucide-react';
+import { api } from '../../services/api/client';
 
 interface HeaderProps {
   activeTab: 'studio' | 'vault' | 'settings';
@@ -12,6 +13,29 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   onOpenCommandPalette,
 }) => {
+  const [serviceCount, setServiceCount] = useState(0);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const health = await api.getHealth();
+        setIsBackendConnected(health?.status === 'ok' || health?.status === 'degraded');
+      } catch (_e) {
+        setIsBackendConnected(false);
+      }
+      try {
+        const data = await api.getServices();
+        setServiceCount(data?.services?.length || 0);
+      } catch (_e) {
+        setServiceCount(0);
+      }
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <header className="h-16 bg-[#0B0D14] border-b border-[#1E2333] px-5 flex items-center justify-between select-none sticky top-0 z-50">
       {/* Left Branding */}
@@ -32,15 +56,19 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* System Health Badge */}
+        {/* System Health Badge — Real Data */}
         <div className="hidden lg:flex items-center space-x-2 bg-[#121624] border border-[#1E2438] px-3 py-1.5 rounded-full text-xs">
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isBackendConnected ? 'bg-emerald-400' : 'bg-red-400'} opacity-75`}></span>
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${isBackendConnected ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
           </span>
-          <span className="text-white font-semibold">System Active</span>
+          <span className="text-white font-semibold">
+            {isBackendConnected ? 'System Active' : 'Backend Offline'}
+          </span>
           <span className="text-slate-600">|</span>
-          <span className="text-slate-400">3 Microservices Guarded</span>
+          <span className="text-slate-400">
+            {serviceCount > 0 ? `${serviceCount} Repo${serviceCount !== 1 ? 's' : ''} Guarded` : 'No Repos Connected'}
+          </span>
         </div>
       </div>
 
