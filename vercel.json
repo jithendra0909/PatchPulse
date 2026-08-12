@@ -3,7 +3,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "/api/:path*"
+      "destination": "https://patchpulse-k8tp.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
